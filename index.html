@@ -715,16 +715,16 @@
           <button
             key={day}
             onClick={() => handleDayClick(date)}
-            className={`aspect-square rounded-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 relative ripple-effect ${
-              isTodayDate ? 'ring-4 ring-blue-500 ring-offset-2 ring-offset-transparent today-glow' : ''
+            className={`aspect-square rounded-lg sm:rounded-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 relative ripple-effect ${
+              isTodayDate ? 'ring-2 sm:ring-4 ring-blue-500 ring-offset-1 sm:ring-offset-2 ring-offset-transparent today-glow' : ''
             } ${bgColor}`}
           >
             <div className="flex flex-col items-center justify-center">
-              <span className={`text-base font-bold ${isTodayDate ? 'text-glow' : ''}`}>{day}</span>
-              {icon}
+              <span className={`text-sm sm:text-base font-bold ${isTodayDate ? 'text-glow' : ''}`}>{day}</span>
+              <div className="hidden sm:block">{icon}</div>
             </div>
             {hasCustomTasks && (
-              <div className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-purple-500 rounded-full shadow-lg shadow-purple-500/50 animate-pulse"></div>
+              <div className="absolute top-0.5 right-0.5 sm:top-1.5 sm:right-1.5 w-1.5 sm:w-2.5 h-1.5 sm:h-2.5 bg-purple-500 rounded-full shadow-lg shadow-purple-500/50 animate-pulse"></div>
             )}
           </button>
         );
@@ -989,9 +989,9 @@
                 </button>
               </div>
 
-              <div className="grid grid-cols-7 gap-3 mb-3">
+              <div className="grid grid-cols-7 gap-1 sm:gap-3 mb-3">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className={`text-center text-sm font-bold py-3 uppercase tracking-wider ${
+                  <div key={day} className={`text-center text-xs sm:text-sm font-bold py-2 sm:py-3 uppercase tracking-wider ${
                     isDark ? 'text-zinc-400' : 'text-gray-600'
                   }`}>
                     {day}
@@ -999,7 +999,7 @@
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-3 mb-8">{days}</div>
+              <div className="grid grid-cols-7 gap-1 sm:gap-3 mb-8">{days}</div>
 
               <div className={`p-6 rounded-2xl border backdrop-blur-sm shadow-lg ${
                 isDark 
