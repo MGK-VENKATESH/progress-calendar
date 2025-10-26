@@ -12,6 +12,7 @@
 
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234F46E5' width='100' height='100'/><text y='75' font-size='70' text-anchor='middle' x='50' fill='white'>📅</text></svg>">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234F46E5' width='100' height='100'/><text y='75' font-size='70' text-anchor='middle' x='50' fill='white'>📅</text></svg>">
+  
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -23,7 +24,120 @@
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
     }
+    
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #000000;
+      }
+    }
+
+    @keyframes checkmark {
+      0% { transform: scale(0) rotate(-45deg); }
+      50% { transform: scale(1.2) rotate(-45deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+
+    @keyframes ripple {
+      0% { transform: scale(0); opacity: 1; }
+      100% { transform: scale(4); opacity: 0; }
+    }
+
+    .animate-checkmark {
+      animation: checkmark 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .ripple-effect {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ripple-effect::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.5);
+      border-radius: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      pointer-events: none;
+    }
+
+    .ripple-effect:active::after {
+      animation: ripple 0.6s ease-out;
+    }
+
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    .glass-effect-light {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    .text-glow {
+      text-shadow: 0 0 20px currentColor;
+    }
+
+    .today-glow {
+      box-shadow: 0 0 30px rgba(59, 130, 246, 0.6), 0 0 60px rgba(59, 130, 246, 0.3);
+    }
+
+    .card-hover {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .card-hover:hover {
+      transform: translateY(-4px) scale(1.02);
+    }
+
+    input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+    }
   </style>
+  
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        const swCode = `
+          const CACHE_NAME = 'progress-calendar-v1';
+          const urlsToCache = [
+            '/',
+            'https://unpkg.com/react@18/umd/react.production.min.js',
+            'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+            'https://unpkg.com/@babel/standalone/babel.min.js',
+            'https://cdn.tailwindcss.com'
+          ];
+
+          self.addEventListener('install', (event) => {
+            event.waitUntil(
+              caches.open(CACHE_NAME)
+                .then((cache) => cache.addAll(urlsToCache))
+            );
+          });
+
+          self.addEventListener('fetch', (event) => {
+            event.respondWith(
+              caches.match(event.request)
+                .then((response) => response || fetch(event.request))
+            );
+          });
+        `;
+        
+        const blob = new Blob([swCode], { type: 'application/javascript' });
+        const swUrl = URL.createObjectURL(blob);
+        
+        navigator.serviceWorker.register(swUrl)
+          .then(() => console.log('Service Worker registered'))
+          .catch((err) => console.log('Service Worker registration failed:', err));
+      });
+    }
+  </script>
 </head>
 <body>
   <div id="root"></div>
@@ -77,11 +191,31 @@
       const [showTaskModal, setShowTaskModal] = useState(false);
       const [streak, setStreak] = useState(0);
       const [currentTime, setCurrentTime] = useState(new Date());
+      const [isDark, setIsDark] = useState(false);
+      const [isTasksExpanded, setIsTasksExpanded] = useState(false);
+
+      useEffect(() => {
+        const checkDarkMode = () => {
+          const darkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          setIsDark(darkMode);
+        };
+        
+        checkDarkMode();
+        
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const handler = (e) => setIsDark(e.matches);
+        mediaQuery.addListener(handler);
+        
+        return () => mediaQuery.removeListener(handler);
+      }, []);
 
       useEffect(() => {
         loadData();
         
-        // Update current time every 30 seconds
+        setTimeout(() => {
+          checkYesterdayStatus();
+        }, 100);
+        
         const interval = setInterval(() => {
           setCurrentTime(new Date());
         }, 30000);
@@ -99,7 +233,6 @@
         }
       }, [selectedDate]);
 
-      // Auto-check for expired tasks every minute
       useEffect(() => {
         const checkExpiredTasks = () => {
           const today = new Date();
@@ -110,7 +243,7 @@
         };
 
         checkExpiredTasks();
-        const interval = setInterval(checkExpiredTasks, 60000); // Check every minute
+        const interval = setInterval(checkExpiredTasks, 60000);
         
         return () => clearInterval(interval);
       }, [dailyTasks, customTasks, progress]);
@@ -187,7 +320,6 @@
         let hasChanges = false;
         const newFailedTasks = [...(dateProgress.failedTasks || [])];
 
-        // Check daily tasks
         tasksForDate.daily.forEach((task, index) => {
           if (task.time && !dateProgress.dailyTasks?.includes(index) && !newFailedTasks.includes(`daily-${index}`)) {
             if (isTaskExpired(task)) {
@@ -197,7 +329,6 @@
           }
         });
 
-        // Check custom tasks
         tasksForDate.custom.forEach((task, index) => {
           if (task.time && !dateProgress.customTasks?.includes(index) && !newFailedTasks.includes(`custom-${index}`)) {
             if (isTaskExpired(task)) {
@@ -233,6 +364,28 @@
         }
 
         setStreak(currentStreak);
+      };
+
+      const checkYesterdayStatus = () => {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(0, 0, 0, 0);
+        
+        const dateKey = formatDateKey(yesterday);
+        
+        const progressData = localStorage.getItem('calendar-progress');
+        const currentProgress = progressData ? JSON.parse(progressData) : {};
+        const yesterdayProgress = currentProgress[dateKey];
+        
+        if (yesterdayProgress && yesterdayProgress.status === 'pending' && !yesterdayProgress.locked) {
+          const newProgress = { ...currentProgress };
+          newProgress[dateKey] = {
+            ...yesterdayProgress,
+            status: 'incomplete',
+            locked: true
+          };
+          saveProgress(newProgress);
+        }
       };
 
       const formatDateKey = (date) => {
@@ -312,14 +465,30 @@
           return;
         }
 
-        // Check if task is expired
         if (task.time && isTaskExpired(task, selectedDate)) {
-          return; // Can't complete expired tasks
+          return;
         }
 
-        // Check if task is already failed
         if (dateProgress.failedTasks?.includes(`daily-${taskIndex}`)) {
-          return; // Can't complete failed tasks
+          return;
+        }
+        
+        if (task && task.time) {
+          if (isToday(selectedDate)) {
+            const now = new Date();
+            const [hours, minutes] = task.time.split(':').map(Number);
+            
+            const scheduledTime = new Date();
+            scheduledTime.setHours(hours, minutes, 0, 0);
+            
+            const graceMinutes = task.gracePeriod || 5;
+            const graceEndTime = new Date(scheduledTime.getTime() + graceMinutes * 60000);
+
+            if (now < scheduledTime || now > graceEndTime) {
+              alert(`This task can only be completed between ${task.time} and ${graceEndTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`);
+              return;
+            }
+          }
         }
 
         const updatedDailyTasks = [...(dateProgress.dailyTasks || [])];
@@ -359,14 +528,30 @@
           return;
         }
 
-        // Check if task is expired
         if (task.time && isTaskExpired(task, selectedDate)) {
           return;
         }
 
-        // Check if task is already failed
         if (dateProgress.failedTasks?.includes(`custom-${taskIndex}`)) {
           return;
+        }
+        
+        if (task && task.time) {
+          if (isToday(selectedDate)) {
+            const now = new Date();
+            const [hours, minutes] = task.time.split(':').map(Number);
+            
+            const scheduledTime = new Date();
+            scheduledTime.setHours(hours, minutes, 0, 0);
+            
+            const graceMinutes = task.gracePeriod || 5;
+            const graceEndTime = new Date(scheduledTime.getTime() + graceMinutes * 60000);
+
+            if (now < scheduledTime || now > graceEndTime) {
+              alert(`This task can only be completed between ${task.time} and ${graceEndTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}`);
+              return;
+            }
+          }
         }
 
         const updatedCustomTasks = [...(dateProgress.customTasks || [])];
@@ -495,39 +680,49 @@
         const isPast = isPastDate(date);
         const hasCustomTasks = customTasks[dateKey] && customTasks[dateKey].length > 0;
 
-        let bgColor = 'bg-gray-100 hover:bg-gray-200 text-gray-700';
+        let bgColor= isDark 
+          ? 'bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 border border-zinc-700' 
+          : 'bg-white/80 hover:bg-gray-100 text-gray-700 shadow-sm';
         let icon = null;
 
         if (dayProgress) {
           if (dayProgress.status === 'complete') {
-            bgColor = 'bg-green-500 text-white shadow-lg';
-            icon = <CheckCircle2 className="w-4 h-4 mt-1" />;
+            bgColor = isDark 
+              ? 'bg-gradient-to-br from-emerald-500 via-green-500 to-teal-500 text-white shadow-xl shadow-green-900/50' 
+              : 'bg-gradient-to-br from-emerald-400 via-green-400 to-teal-400 text-white shadow-xl shadow-green-500/30';
+            icon = <CheckCircle2 className="w-5 h-5 mt-1 animate-checkmark" />;
           } else if (dayProgress.status === 'incomplete' && dayProgress.locked) {
-            bgColor = 'bg-red-500 text-white shadow-lg';
-            icon = <XCircle className="w-4 h-4 mt-1" />;
+            bgColor = isDark 
+              ? 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-500 text-white shadow-xl shadow-red-900/50' 
+              : 'bg-gradient-to-br from-rose-400 via-red-400 to-orange-400 text-white shadow-xl shadow-red-500/30';
+            icon = <XCircle className="w-5 h-5 mt-1" />;
           } else if (dayProgress.status === 'pending') {
-            bgColor = 'bg-yellow-200 hover:bg-yellow-300 text-gray-800';
-            icon = <Circle className="w-4 h-4 mt-1" />;
+            bgColor = isDark 
+              ? 'bg-gradient-to-br from-amber-500 via-yellow-500 to-orange-400 text-white hover:from-amber-400 hover:via-yellow-400 hover:to-orange-300 shadow-lg shadow-yellow-900/40' 
+              : 'bg-gradient-to-br from-amber-300 via-yellow-300 to-orange-300 hover:from-amber-400 hover:via-yellow-400 hover:to-orange-400 text-gray-900 shadow-lg shadow-yellow-500/30';
+            icon = <Circle className="w-5 h-5 mt-1" />;
           }
         } else if (isPast) {
-          bgColor = 'bg-red-500 text-white shadow-lg';
-          icon = <XCircle className="w-4 h-4 mt-1" />;
+          bgColor = isDark 
+            ? 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-500 text-white shadow-xl shadow-red-900/50' 
+            : 'bg-gradient-to-br from-rose-400 via-red-400 to-orange-400 text-white shadow-xl shadow-red-500/30';
+          icon = <XCircle className="w-5 h-5 mt-1" />;
         }
 
         days.push(
           <button
             key={day}
             onClick={() => handleDayClick(date)}
-            className={`aspect-square rounded-lg flex items-center justify-center transition-all hover:scale-105 relative ${
-              isTodayDate ? 'ring-2 ring-blue-500 ring-offset-2' : ''
+            className={`aspect-square rounded-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 relative ripple-effect ${
+              isTodayDate ? 'ring-4 ring-blue-500 ring-offset-2 ring-offset-transparent today-glow' : ''
             } ${bgColor}`}
           >
             <div className="flex flex-col items-center justify-center">
-              <span className="text-sm font-medium">{day}</span>
+              <span className={`text-base font-bold ${isTodayDate ? 'text-glow' : ''}`}>{day}</span>
               {icon}
             </div>
             {hasCustomTasks && (
-              <div className="absolute top-1 right-1 w-2 h-2 bg-purple-500 rounded-full"></div>
+              <div className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-purple-500 rounded-full shadow-lg shadow-purple-500/50 animate-pulse"></div>
             )}
           </button>
         );
@@ -545,158 +740,278 @@
       const tasksForSelectedDate = selectedDate ? getTasksForDate(selectedDate) : { daily: [], custom: [] };
 
       return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8">
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8">
-              <div className="mb-8">
-                <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-2">Progress Calendar</h1>
-                <p className="text-gray-600">Track your daily tasks with time-based automation</p>
+        <div className={`min-h-screen p-6 md:p-10 transition-colors duration-500 ${
+          isDark 
+            ? 'bg-gradient-to-br from-black via-zinc-950 to-black' 
+            : 'bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50'
+        }`}>
+          <div className="max-w-5xl mx-auto">
+            <div className={`rounded-3xl shadow-2xl p-8 md:p-10 transition-all duration-500 ${
+              isDark 
+                ? 'glass-effect border border-zinc-800/50' 
+                : 'glass-effect-light border border-white/50'
+            }`}>
+              <div className="mb-10">
+                <h1 className={`text-4xl md:text-5xl font-black mb-3 bg-gradient-to-r ${
+                  isDark 
+                    ? 'from-blue-400 via-purple-400 to-pink-400' 
+                    : 'from-blue-600 via-purple-600 to-pink-600'
+                } bg-clip-text text-transparent`}>
+                  Progress Calendar
+                </h1>
+                <p className={`text-lg ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                  Track your daily tasks with time-based automation
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Target className="w-5 h-5 text-green-600" />
-                    <span className="text-sm font-medium text-green-800">Current Streak</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <div className={`rounded-2xl p-6 border backdrop-blur-sm card-hover ${
+                  isDark 
+                    ? 'bg-gradient-to-br from-emerald-900/50 via-green-900/50 to-teal-900/50 border-emerald-700/50 shadow-xl shadow-green-900/20' 
+                    : 'bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 border-emerald-200 shadow-xl shadow-green-500/10'
+                }`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <Target className={`w-6 h-6 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                    <span className={`text-sm font-bold uppercase tracking-wider ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>
+                      Current Streak
+                    </span>
                   </div>
-                  <p className="text-3xl font-bold text-green-700">{streak} days</p>
+                  <p className={`text-4xl font-black ${isDark ? 'text-emerald-400 text-glow' : 'text-emerald-700'}`}>
+                    {streak} <span className="text-xl font-semibold">days</span>
+                  </p>
                 </div>
 
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CheckCircle2 className="w-5 h-5 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-800">This Month</span>
+                <div className={`rounded-2xl p-6 border backdrop-blur-sm card-hover ${
+                  isDark 
+                    ? 'bg-gradient-to-br from-blue-900/50 via-cyan-900/50 to-sky-900/50 border-blue-700/50 shadow-xl shadow-blue-900/20' 
+                    : 'bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 border-blue-200 shadow-xl shadow-blue-500/10'
+                }`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <CheckCircle2 className={`w-6 h-6 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                    <span className={`text-sm font-bold uppercase tracking-wider ${isDark ? 'text-blue-300' : 'text-blue-800'}`}>
+                      This Month
+                    </span>
                   </div>
-                  <p className="text-3xl font-bold text-blue-700">{thisMonthComplete} days</p>
+                  <p className={`text-4xl font-black ${isDark ? 'text-blue-400 text-glow' : 'text-blue-700'}`}>
+                    {thisMonthComplete} <span className="text-xl font-semibold">days</span>
+                  </p>
                 </div>
 
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Circle className="w-5 h-5 text-purple-600" />
-                    <span className="text-sm font-medium text-purple-800">Total Complete</span>
+                <div className={`rounded-2xl p-6 border backdrop-blur-sm card-hover ${
+                  isDark 
+                    ? 'bg-gradient-to-br from-purple-900/50 via-fuchsia-900/50 to-pink-900/50 border-purple-700/50 shadow-xl shadow-purple-900/20' 
+                    : 'bg-gradient-to-br from-purple-50 via-fuchsia-50 to-pink-50 border-purple-200 shadow-xl shadow-purple-500/10'
+                }`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <Circle className={`w-6 h-6 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                    <span className={`text-sm font-bold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-purple-800'}`}>
+                      Total Complete
+                    </span>
                   </div>
-                  <p className="text-3xl font-bold text-purple-700">{totalDaysComplete} days</p>
+                  <p className={`text-4xl font-black ${isDark ? 'text-purple-400 text-glow' : 'text-purple-700'}`}>
+                    {totalDaysComplete} <span className="text-xl font-semibold">days</span>
+                  </p>
                 </div>
               </div>
 
-              <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h3 className="font-semibold text-blue-900 mb-2">Daily Recurring Tasks</h3>
-                <p className="text-xs text-blue-700 mb-3">These tasks apply to every day. Add time deadlines for automatic tracking!</p>
-                <div className="space-y-2 mb-3">
+              <div className={`mb-8 p-6 rounded-2xl border backdrop-blur-sm shadow-lg ${
+                isDark 
+                  ? 'bg-blue-950/40 border-blue-800/50 shadow-blue-900/20' 
+                  : 'bg-blue-50/80 border-blue-200 shadow-blue-500/10'
+              }`}>
+                <h3 className={`font-bold text-lg mb-2 ${isDark ? 'text-blue-300' : 'text-blue-900'}`}>
+                  Daily Recurring Tasks
+                </h3>
+                <p className={`text-sm mb-4 ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
+                  These tasks apply to every day. Add time deadlines for automatic tracking!
+                </p>
+                <div className="space-y-3 mb-4">
                   <input
                     type="text"
                     value={newTask.name}
                     onChange={(e) => setNewTask({...newTask, name: e.target.value})}
                     onKeyPress={(e) => e.key === 'Enter' && addTask()}
                     placeholder="Task name (e.g., Wake up)"
-                    className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-4 transition-all duration-300 ${
+                      isDark 
+                        ? 'bg-zinc-800/80 border-blue-700/50 text-white placeholder-zinc-500 focus:ring-blue-500/30 focus:border-blue-500' 
+                        : 'bg-white/80 border-blue-300 focus:ring-blue-500/20 focus:border-blue-500'
+                    }`}
                   />
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <input
                       type="time"
                       value={newTask.time}
                       onChange={(e) => setNewTask({...newTask, time: e.target.value})}
                       placeholder="Deadline time"
-                      className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`flex-1 px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-4 transition-all duration-300 ${
+                        isDark 
+                          ? 'bg-zinc-800/80 border-blue-700/50 text-white focus:ring-blue-500/30 focus:border-blue-500' 
+                          : 'bg-white/80 border-blue-300 focus:ring-blue-500/20 focus:border-blue-500'
+                      }`}
                     />
                     <input
                       type="number"
                       value={newTask.gracePeriod}
                       onChange={(e) => setNewTask({...newTask, gracePeriod: e.target.value})}
-                      placeholder="Grace (min)"
+                      placeholder="Grace"
                       min="0"
                       max="60"
-                      className="w-24 px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`w-28 px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-4 transition-all duration-300 ${
+                        isDark 
+                          ? 'bg-zinc-800/80 border-blue-700/50 text-white focus:ring-blue-500/30 focus:border-blue-500' 
+                          : 'bg-white/80 border-blue-300 focus:ring-blue-500/20 focus:border-blue-500'
+                      }`}
                     />
                     <button
                       onClick={addTask}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                      className={`px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2 shadow-lg ripple-effect font-semibold ${
+                        isDark 
+                          ? 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-blue-900/30' 
+                          : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-blue-500/30'
+                      }`}
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-5 h-5" />
                       Add
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  {dailyTasks.map((task, index) => (
-                    <div key={index} className="flex items-center justify-between bg-white p-3 rounded border border-blue-200">
-                      <div className="flex-1">
-                        <span className="text-sm text-gray-700 font-medium">{task.name || task}</span>
+                <div className="space-y-3">
+                {dailyTasks.slice(0, isTasksExpanded ? dailyTasks.length : 2).map((task, index) => (
+                    <div key={index} className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all duration-300 hover:scale-[1.02] shadow-md ${
+                    isDark 
+                        ? 'bg-zinc-800/80 border-blue-800/50 hover:border-blue-700/50 shadow-zinc-900/30' 
+                        : 'bg-white/90 border-blue-200 hover:border-blue-300 shadow-blue-500/10'
+                    }`}>
+                    <div className="flex-1">
+                        <span className={`text-sm font-semibold block ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
+                        {task.name || task}
+                        </span>
                         {task.time && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <Clock className="w-3 h-3 text-blue-600" />
-                            <span className="text-xs text-blue-600">
-                              Due: {task.time} (+{task.gracePeriod || 5}min grace)
+                        <div className="flex items-center gap-2 mt-2">
+                            <Clock className={`w-4 h-4 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                            <span className={`text-xs font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                            Due: {task.time} (+{task.gracePeriod || 5}min grace)
                             </span>
-                          </div>
+                        </div>
                         )}
-                      </div>
-                      <button
-                        onClick={() => deleteTask(index)}
-                        className="text-red-500 hover:text-red-700 p-1"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </div>
-                  ))}
-                  {dailyTasks.length === 0 && (
-                    <p className="text-sm text-blue-700 italic">Add tasks to track your daily progress</p>
-                  )}
+                    <button
+                        onClick={() => deleteTask(index)}
+                        className={`p-2 rounded-lg transition-all duration-300 hover:scale-110 active:scale-95 ${
+                        isDark 
+                            ? 'text-red-400 hover:text-red-300 hover:bg-red-950/40' 
+                            : 'text-red-500 hover:text-red-700 hover:bg-red-50'
+                        }`}
+                    >
+                        <Trash2 className="w-5 h-5" />
+                    </button>
+                    </div>
+                ))}
+                
+                {dailyTasks.length > 2 && (
+                    <button
+                    onClick={() => setIsTasksExpanded(!isTasksExpanded)}
+                    className={`w-full py-3 px-4 rounded-xl border-2 transition-all duration-300 hover:scale-[1.02] font-semibold text-sm ${
+                        isDark 
+                        ? 'bg-zinc-800/60 border-blue-800/50 hover:border-blue-700/50 text-blue-400 hover:bg-zinc-800' 
+                        : 'bg-blue-50/60 border-blue-200 hover:border-blue-300 text-blue-700 hover:bg-blue-100'
+                    }`}
+                    >
+                    {isTasksExpanded ? (
+                        <span className="flex items-center justify-center gap-2">
+                        <span>Show Less</span>
+                        <ChevronLeft className="w-4 h-4 rotate-90" />
+                        </span>
+                    ) : (
+                        <span className="flex items-center justify-center gap-2">
+                        <span>+{dailyTasks.length - 2} more tasks</span>
+                        <ChevronRight className="w-4 h-4 rotate-90" />
+                        </span>
+                    )}
+                    </button>
+                )}
+                
+                {dailyTasks.length === 0 && (
+                    <p className={`text-sm italic text-center py-4 ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
+                    Add tasks to track your daily progress
+                    </p>
+                )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-8">
                 <button
                   onClick={() => changeMonth(-1)}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  className={`p-3 rounded-2xl transition-all duration-300 hover:scale-110 active:scale-95 ripple-effect shadow-lg ${
+                    isDark 
+                      ? 'hover:bg-zinc-800/80 text-zinc-300 shadow-zinc-900/30' 
+                      : 'hover:bg-white/80 text-gray-600 shadow-gray-500/10'
+                  }`}
                 >
-                  <ChevronLeft className="w-6 h-6 text-gray-600" />
+                  <ChevronLeft className="w-7 h-7" />
                 </button>
-                <h2 className="text-xl md:text-2xl font-semibold text-gray-800">{monthName}</h2>
+                <h2 className={`text-2xl md:text-3xl font-bold ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                  {monthName}
+                </h2>
                 <button
                   onClick={() => changeMonth(1)}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  className={`p-3 rounded-2xl transition-all duration-300 hover:scale-110 active:scale-95 ripple-effect shadow-lg ${
+                    isDark 
+                      ? 'hover:bg-zinc-800/80 text-zinc-300 shadow-zinc-900/30' 
+                      : 'hover:bg-white/80 text-gray-600 shadow-gray-500/10'
+                  }`}
                 >
-                  <ChevronRight className="w-6 h-6 text-gray-600" />
+                  <ChevronRight className="w-7 h-7" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-7 gap-2 mb-2">
+              <div className="grid grid-cols-7 gap-3 mb-3">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="text-center text-sm font-medium text-gray-600 py-2">
+                  <div key={day} className={`text-center text-sm font-bold py-3 uppercase tracking-wider ${
+                    isDark ? 'text-zinc-400' : 'text-gray-600'
+                  }`}>
                     {day}
                   </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-2">{days}</div>
+              <div className="grid grid-cols-7 gap-3 mb-8">{days}</div>
 
-              <div className="mt-8 p-4 bg-gradient-to-r from-green-50 via-yellow-50 to-red-50 rounded-lg border border-gray-300">
-                <p className="text-sm text-gray-800 mb-2">
-                  <strong>Legend:</strong>
+              <div className={`p-6 rounded-2xl border backdrop-blur-sm shadow-lg ${
+                isDark 
+                  ? 'bg-zinc-900/60 border-zinc-800/50 shadow-zinc-900/30' 
+                  : 'bg-gradient-to-r from-green-50/80 via-yellow-50/80 to-red-50/80 border-gray-300 shadow-gray-500/10'
+              }`}>
+                <p className={`text-sm mb-3 font-bold uppercase tracking-wider ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
+                  Legend:
                 </p>
-                <div className="flex flex-wrap gap-4 text-sm">
+                <div className="flex flex-wrap gap-5 text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-green-500 rounded"></div>
-                    <span>Complete</span>
+                    <div className={`w-5 h-5 rounded-lg shadow-md ${isDark ? 'bg-green-600 shadow-green-900/50' : 'bg-green-500 shadow-green-500/30'}`}></div>
+                    <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Complete</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-yellow-200 rounded"></div>
-                    <span>In Progress</span>
+                    <div className={`w-5 h-5 rounded-lg shadow-md ${isDark ? 'bg-yellow-600 shadow-yellow-900/50' : 'bg-yellow-300 shadow-yellow-500/30'}`}></div>
+                    <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>In Progress</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-red-500 rounded"></div>
-                    <span>Incomplete/Failed</span>
+                    <div className={`w-5 h-5 rounded-lg shadow-md ${isDark ? 'bg-red-600 shadow-red-900/50' : 'bg-red-500 shadow-red-500/30'}`}></div>
+                    <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Incomplete/Failed</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-gray-100 rounded border border-gray-300"></div>
-                    <span>Not started</span>
+                    <div className={`w-5 h-5 rounded-lg border-2 shadow-sm ${
+                      isDark ? 'bg-zinc-800/80 border-zinc-700' : 'bg-white/80 border-gray-300'
+                    }`}></div>
+                    <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Not started</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-white rounded border border-gray-300 relative">
-                      <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                    <div className={`w-5 h-5 rounded-lg border-2 relative shadow-sm ${
+                      isDark ? 'bg-zinc-800/80 border-zinc-700' : 'bg-white/80 border-gray-300'
+                    }`}>
+                      <div className="absolute top-0 right-0 w-2 h-2 bg-purple-500 rounded-full shadow-lg shadow-purple-500/50 animate-pulse"></div>
                     </div>
-                    <span>Has custom task</span>
+                    <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Has custom task</span>
                   </div>
                 </div>
               </div>
@@ -704,23 +1019,35 @@
           </div>
 
           {showTaskModal && selectedDate && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-gray-800">
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+              <div className={`rounded-3xl shadow-2xl max-w-lg w-full p-8 max-h-[90vh] overflow-y-auto transition-colors ${
+                isDark 
+                  ? 'bg-zinc-900/95 border-2 border-zinc-800/50 shadow-zinc-950/50' 
+                  : 'bg-white/95 border-2 border-gray-200 shadow-gray-900/20'
+              }`}>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className={`text-2xl font-bold ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
                     {selectedDate.toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </h3>
                   <button
                     onClick={() => setShowTaskModal(false)}
-                    className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                    className={`p-2 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 ${
+                      isDark 
+                        ? 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200' 
+                        : 'hover:bg-gray-100 text-gray-600 hover:text-gray-800'
+                    }`}
                   >
-                    <X className="w-6 h-6 text-gray-600" />
+                    <X className="w-6 h-6" />
                   </button>
                 </div>
 
                 {isLocked && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm text-red-800 font-medium">
+                  <div className={`mb-6 p-4 rounded-xl border-2 ${
+                    isDark 
+                      ? 'bg-red-950/40 border-red-800/50' 
+                      : 'bg-red-50 border-red-300'
+                  }`}>
+                    <p className={`text-sm font-semibold ${isDark ? 'text-red-400' : 'text-red-800'}`}>
                       {isFutureDate(selectedDate) 
                         ? "This date hasn't arrived yet. You can only mark tasks for today."
                         : "This date is locked. Past incomplete days cannot be modified."}
@@ -729,16 +1056,18 @@
                 )}
 
                 {tasksForSelectedDate.daily.length === 0 && tasksForSelectedDate.custom.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No tasks for this day yet.</p>
-                    <p className="text-sm">Add daily tasks above or custom tasks below!</p>
+                  <div className={`text-center py-12 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                    <p className="text-lg font-medium">No tasks for this day yet.</p>
+                    <p className="text-sm mt-2">Add daily tasks above or custom tasks below!</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     {tasksForSelectedDate.daily.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Daily Tasks</h4>
-                        <div className="space-y-2">
+                        <h4 className={`text-sm font-bold uppercase tracking-wider mb-3 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                          Daily Tasks
+                        </h4>
+                        <div className="space-y-3">
                           {tasksForSelectedDate.daily.map((task, index) => {
                             const isChecked = selectedProgress?.dailyTasks?.includes(index) || false;
                             const isFailed = selectedProgress?.failedTasks?.includes(`daily-${index}`) || false;
@@ -751,41 +1080,51 @@
                                 key={index}
                                 onClick={() => canToggle && toggleDailyTask(index)}
                                 disabled={!canToggle}
-                                className={`w-full flex items-start gap-3 p-3 rounded-lg border-2 transition-all ${
+                                className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 transition-all duration-300 ${
                                   isFailed
-                                    ? 'bg-red-50 border-red-500 opacity-75'
+                                    ? isDark 
+                                      ? 'bg-red-950/40 border-red-800 opacity-75' 
+                                      : 'bg-red-50 border-red-400 opacity-75'
                                     : isChecked
-                                    ? 'bg-green-50 border-green-500'
-                                    : 'bg-gray-50 border-gray-300 hover:border-gray-400'
-                                } ${!canToggle ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                    ? isDark 
+                                      ? 'bg-green-950/40 border-green-700 shadow-lg shadow-green-900/30' 
+                                      : 'bg-green-50 border-green-400 shadow-lg shadow-green-500/20'
+                                    : isDark 
+                                      ? 'bg-zinc-800/80 border-zinc-700 hover:border-zinc-600' 
+                                      : 'bg-gray-50 border-gray-300 hover:border-gray-400'
+                                } ${!canToggle ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]'}`}
                               >
-                                <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${
                                   isFailed
-                                    ? 'bg-red-500'
+                                    ? 'bg-red-600 shadow-lg shadow-red-900/50'
                                     : isChecked 
-                                    ? 'bg-green-500' 
-                                    : 'bg-white border-2 border-gray-300'
+                                    ? 'bg-green-600 shadow-lg shadow-green-900/50' 
+                                    : isDark 
+                                      ? 'bg-zinc-900 border-2 border-zinc-600' 
+                                      : 'bg-white border-2 border-gray-400'
                                 }`}>
-                                  {isFailed ? <XCircle className="w-5 h-5 text-white" /> : isChecked && <CheckCircle2 className="w-5 h-5 text-white" />}
+                                  {isFailed ? <XCircle className="w-5 h-5 text-white" /> : isChecked && <CheckCircle2 className="w-5 h-5 text-white animate-checkmark" />}
                                 </div>
                                 <div className="flex-1 text-left">
-                                  <span className={`block ${
+                                  <span className={`block font-semibold ${
                                     isFailed 
-                                      ? 'text-red-900 font-medium line-through' 
+                                      ? isDark ? 'text-red-400 line-through' : 'text-red-900 line-through'
                                       : isChecked 
-                                      ? 'text-green-900 font-medium' 
-                                      : 'text-gray-700'
+                                      ? isDark ? 'text-green-400' : 'text-green-900'
+                                      : isDark ? 'text-zinc-200' : 'text-gray-800'
                                   }`}>
                                     {taskObj.name}
                                   </span>
                                   {taskObj.time && (
-                                    <div className="flex items-center gap-1 mt-1">
-                                      <Clock className={`w-3 h-3 ${isFailed ? 'text-red-600' : 'text-gray-500'}`} />
-                                      <span className={`text-xs ${isFailed ? 'text-red-600' : 'text-gray-500'}`}>
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <Clock className={`w-4 h-4 ${isFailed ? 'text-red-500' : isDark ? 'text-zinc-500' : 'text-gray-500'}`} />
+                                      <span className={`text-xs font-medium ${isFailed ? 'text-red-500' : isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
                                         {taskObj.time} (+{taskObj.gracePeriod || 5}min)
                                       </span>
                                       {isFailed && (
-                                        <span className="text-xs text-red-600 font-medium ml-2">EXPIRED</span>
+                                        <span className={`text-xs font-bold uppercase tracking-wider ml-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                          EXPIRED
+                                        </span>
                                       )}
                                     </div>
                                   )}
@@ -799,8 +1138,10 @@
 
                     {tasksForSelectedDate.custom.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-semibold text-purple-700 mb-2">Custom Tasks for This Day</h4>
-                        <div className="space-y-2">
+                        <h4 className={`text-sm font-bold uppercase tracking-wider mb-3 ${isDark ? 'text-purple-400' : 'text-purple-700'}`}>
+                          Custom Tasks for This Day
+                        </h4>
+                        <div className="space-y-3">
                           {tasksForSelectedDate.custom.map((task, index) => {
                             const isChecked = selectedProgress?.customTasks?.includes(index) || false;
                             const isFailed = selectedProgress?.failedTasks?.includes(`custom-${index}`) || false;
@@ -813,41 +1154,50 @@
                                 <button
                                   onClick={() => canToggle && toggleCustomTask(index)}
                                   disabled={!canToggle}
-                                  className={`w-full flex items-start gap-3 p-3 rounded-lg border-2 transition-all ${
+                                  className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 transition-all duration-300 ${
                                     isFailed
-                                      ? 'bg-red-50 border-red-500 opacity-75'
+                                      ? isDark 
+                                        ? 'bg-red-950/40 border-red-800 opacity-75': 'bg-red-50 border-red-400 opacity-75'
                                       : isChecked
-                                      ? 'bg-purple-50 border-purple-500'
-                                      : 'bg-gray-50 border-purple-300 hover:border-purple-400'
-                                  } ${!canToggle ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                                      ? isDark 
+                                        ? 'bg-purple-950/40 border-purple-700 shadow-lg shadow-purple-900/30' 
+                                        : 'bg-purple-50 border-purple-400 shadow-lg shadow-purple-500/20'
+                                      : isDark 
+                                        ? 'bg-zinc-800/80 border-purple-800 hover:border-purple-700' 
+                                        : 'bg-gray-50 border-purple-300 hover:border-purple-400'
+                                  } ${!canToggle ? 'cursor-not-allowed' : 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]'}`}
                                 >
-                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${
                                     isFailed
-                                      ? 'bg-red-500'
+                                      ? 'bg-red-600 shadow-lg shadow-red-900/50'
                                       : isChecked 
-                                      ? 'bg-purple-500' 
-                                      : 'bg-white border-2 border-purple-300'
+                                      ? 'bg-purple-600 shadow-lg shadow-purple-900/50' 
+                                      : isDark 
+                                        ? 'bg-zinc-900 border-2 border-purple-700' 
+                                        : 'bg-white border-2 border-purple-400'
                                   }`}>
-                                    {isFailed ? <XCircle className="w-5 h-5 text-white" /> : isChecked && <CheckCircle2 className="w-5 h-5 text-white" />}
+                                    {isFailed ? <XCircle className="w-5 h-5 text-white" /> : isChecked && <CheckCircle2 className="w-5 h-5 text-white animate-checkmark" />}
                                   </div>
                                   <div className="flex-1 text-left">
-                                    <span className={`block ${
+                                    <span className={`block font-semibold ${
                                       isFailed 
-                                        ? 'text-red-900 font-medium line-through' 
+                                        ? isDark ? 'text-red-400 line-through' : 'text-red-900 line-through'
                                         : isChecked 
-                                        ? 'text-purple-900 font-medium' 
-                                        : 'text-gray-700'
+                                        ? isDark ? 'text-purple-400' : 'text-purple-900'
+                                        : isDark ? 'text-zinc-200' : 'text-gray-800'
                                     }`}>
                                       {taskObj.name}
                                     </span>
                                     {taskObj.time && (
-                                      <div className="flex items-center gap-1 mt-1">
-                                        <Clock className={`w-3 h-3 ${isFailed ? 'text-red-600' : 'text-purple-500'}`} />
-                                        <span className={`text-xs ${isFailed ? 'text-red-600' : 'text-purple-500'}`}>
+                                      <div className="flex items-center gap-2 mt-2">
+                                        <Clock className={`w-4 h-4 ${isFailed ? 'text-red-500' : isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+                                        <span className={`text-xs font-medium ${isFailed ? 'text-red-500' : isDark ? 'text-purple-400' : 'text-purple-500'}`}>
                                           {taskObj.time} (+{taskObj.gracePeriod || 5}min)
                                         </span>
                                         {isFailed && (
-                                          <span className="text-xs text-red-600 font-medium ml-2">EXPIRED</span>
+                                          <span className={`text-xs font-bold uppercase tracking-wider ml-2 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                            EXPIRED
+                                          </span>
                                         )}
                                       </div>
                                     )}
@@ -855,9 +1205,13 @@
                                 </button>
                                 <button
                                   onClick={() => deleteCustomTask(selectedDateKey, index)}
-                                  className="absolute top-2 right-2 text-red-500 hover:text-red-700 p-1 bg-white rounded"
+                                  className={`absolute top-2 right-2 p-1.5 rounded-lg transition-all duration-300 hover:scale-110 active:scale-95 ${
+                                    isDark 
+                                      ? 'text-red-400 hover:text-red-300 hover:bg-red-950/40 bg-zinc-900/80' 
+                                      : 'text-red-500 hover:text-red-700 bg-white/90 hover:bg-red-50'
+                                  }`}
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
                             );
@@ -866,22 +1220,22 @@
                       </div>
                     )}
 
-                    <div className="pt-4 border-t border-gray-200">
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-gray-600">Completed:</span>
-                        <span className="font-semibold text-green-700">
+                    <div className={`pt-6 border-t-2 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                      <div className="flex justify-between text-sm mb-3">
+                        <span className={`font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Completed:</span>
+                        <span className={`font-bold text-lg ${isDark ? 'text-green-400' : 'text-green-700'}`}>
                           {(selectedProgress?.dailyTasks?.length || 0) + (selectedProgress?.customTasks?.length || 0)}
                         </span>
                       </div>
-                      <div className="flex justify-between text-sm mb-2">
-                        <span className="text-gray-600">Failed:</span>
-                        <span className="font-semibold text-red-700">
+                      <div className="flex justify-between text-sm mb-3">
+                        <span className={`font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Failed:</span>
+                        <span className={`font-bold text-lg ${isDark ? 'text-red-400' : 'text-red-700'}`}>
                           {selectedProgress?.failedTasks?.length || 0}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Total Tasks:</span>
-                        <span className="font-semibold text-gray-800">
+                        <span className={`font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Total Tasks:</span>
+                        <span className={`font-bold text-lg ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
                           {tasksForSelectedDate.daily.length + tasksForSelectedDate.custom.length}
                         </span>
                       </div>
@@ -889,23 +1243,33 @@
                   </div>
                 )}
 
-                <div className="mt-6 pt-4 border-t border-gray-200">
-                  <h4 className="text-sm font-semibold text-purple-700 mb-2">Add Custom Task for This Day</h4>
-                  <div className="space-y-2">
+                <div className={`mt-8 pt-6 border-t-2 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                  <h4 className={`text-sm font-bold uppercase tracking-wider mb-3 ${isDark ? 'text-purple-400' : 'text-purple-700'}`}>
+                    Add Custom Task for This Day
+                  </h4>
+                  <div className="space-y-3">
                     <input
                       type="text"
                       value={newCustomTask.name}
                       onChange={(e) => setNewCustomTask({...newCustomTask, name: e.target.value})}
                       onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && addCustomTask()}
                       placeholder="Task name (e.g., Haircut)"
-                      className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-4 transition-all duration-300 ${
+                        isDark 
+                          ? 'bg-zinc-800/80 border-purple-700/50 text-white placeholder-zinc-500 focus:ring-purple-500/30 focus:border-purple-500' 
+                          : 'bg-white/80 border-purple-300 focus:ring-purple-500/20 focus:border-purple-500'
+                      }`}
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-3">
                       <input
                         type="time"
                         value={newCustomTask.time}
                         onChange={(e) => setNewCustomTask({...newCustomTask, time: e.target.value})}
-                        className="flex-1 px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className={`flex-1 px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-4 transition-all duration-300 ${
+                          isDark 
+                            ? 'bg-zinc-800/80 border-purple-700/50 text-white focus:ring-purple-500/30 focus:border-purple-500' 
+                            : 'bg-white/80 border-purple-300 focus:ring-purple-500/20 focus:border-purple-500'
+                        }`}
                       />
                       <input
                         type="number"
@@ -914,28 +1278,42 @@
                         placeholder="Grace"
                         min="0"
                         max="60"
-                        className="w-20 px-3 py-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className={`w-24 px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-4 transition-all duration-300 ${
+                          isDark 
+                            ? 'bg-zinc-800/80 border-purple-700/50 text-white focus:ring-purple-500/30 focus:border-purple-500' 
+                            : 'bg-white/80 border-purple-300 focus:ring-purple-500/20 focus:border-purple-500'
+                        }`}
                       />
                       <button
                         onClick={addCustomTask}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+                        className={`px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2 shadow-lg ripple-effect font-semibold ${
+                          isDark 
+                            ? 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white shadow-purple-900/30' 
+                            : 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-700 hover:to-fuchsia-700 text-white shadow-purple-500/30'
+                        }`}
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-5 h-5" />
                       </button>
                     </div>
-                    <p className="text-xs text-purple-600">
+                    <p className={`text-xs font-medium ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>
                       Leave time empty for no deadline, or set a time with grace period in minutes
                     </p>
                   </div>
                 </div>
 
                 {isToday(selectedDate) && (
-                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertCircle className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-medium text-blue-900">Today's Status</span>
+                  <div className={`mt-6 p-4 rounded-xl border-2 ${
+                    isDark 
+                      ? 'bg-blue-950/40 border-blue-800/50' 
+                      : 'bg-blue-50 border-blue-300'
+                  }`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <AlertCircle className={`w-5 h-5 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                      <span className={`text-sm font-bold ${isDark ? 'text-blue-300' : 'text-blue-900'}`}>
+                        Today's Status
+                      </span>
                     </div>
-                    <p className="text-xs text-blue-700">
+                    <p className={`text-xs font-medium ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
                       Tasks with time deadlines will automatically fail if not completed within the grace period. The app checks every minute.
                     </p>
                   </div>
@@ -951,4 +1329,3 @@
   </script>
 </body>
 </html>
-                
