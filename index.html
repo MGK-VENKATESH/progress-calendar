@@ -195,19 +195,21 @@
       const [isTasksExpanded, setIsTasksExpanded] = useState(false);
 
       useEffect(() => {
-        const checkDarkMode = () => {
+        // Load saved theme preference
+        const savedTheme = localStorage.getItem('theme-preference');
+        if (savedTheme) {
+          setIsDark(savedTheme === 'dark');
+        } else {
+          // Fall back to system preference
           const darkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
           setIsDark(darkMode);
-        };
-        
-        checkDarkMode();
-        
-        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        const handler = (e) => setIsDark(e.matches);
-        mediaQuery.addListener(handler);
-        
-        return () => mediaQuery.removeListener(handler);
+        }
       }, []);
+
+      // Save theme preference when it changes
+      useEffect(() => {
+        localStorage.setItem('theme-preference', isDark ? 'dark' : 'light');
+      }, [isDark]);
 
       useEffect(() => {
         loadData();
@@ -752,13 +754,34 @@
                 : 'glass-effect-light border border-white/50'
             }`}>
               <div className="mb-10">
-                <h1 className={`text-4xl md:text-5xl font-black mb-3 bg-gradient-to-r ${
-                  isDark 
-                    ? 'from-blue-400 via-purple-400 to-pink-400' 
-                    : 'from-blue-600 via-purple-600 to-pink-600'
-                } bg-clip-text text-transparent`}>
-                  Progress Calendar
-                </h1>
+                <div className="flex items-center justify-between mb-3">
+                  <h1 className={`text-4xl md:text-5xl font-black bg-gradient-to-r ${
+                    isDark 
+                      ? 'from-blue-400 via-purple-400 to-pink-400' 
+                      : 'from-blue-600 via-purple-600 to-pink-600'
+                  } bg-clip-text text-transparent`}>
+                    Progress Calendar
+                  </h1>
+                  <button
+                    onClick={() => setIsDark(!isDark)}
+                    className={`p-3 rounded-2xl transition-all duration-300 hover:scale-110 active:scale-95 shadow-lg ${
+                      isDark 
+                        ? 'bg-yellow-500 hover:bg-yellow-400 text-gray-900' 
+                        : 'bg-gray-800 hover:bg-gray-700 text-yellow-400'
+                    }`}
+                    title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                  >
+                    {isDark ? (
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
                 <p className={`text-lg ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                   Track your daily tasks with time-based automation
                 </p>
