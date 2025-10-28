@@ -344,6 +344,7 @@
           const newProgress = { ...progress };
           newProgress[dateKey] = {
             ...dateProgress,
+            status: newFailedTasks.length > 0 ? 'incomplete' : dateProgress.status,
             failedTasks: newFailedTasks
           };
           saveProgress(newProgress);
@@ -504,11 +505,12 @@
         const tasksForDate = getTasksForDate(selectedDate);
         const totalTasks = tasksForDate.daily.length + tasksForDate.custom.length;
         const completedTasks = updatedDailyTasks.length + (dateProgress.customTasks || []).length;
-        const allComplete = completedTasks === totalTasks && totalTasks > 0;
+        const failedTasks = dateProgress.failedTasks?.length || 0;
+        const allComplete = completedTasks === totalTasks && totalTasks > 0 && failedTasks === 0;
 
         const newProgress = { ...progress };
         newProgress[dateKey] = {
-          status: allComplete ? 'complete' : 'pending',
+          status: allComplete ? 'complete' : failedTasks > 0 ? 'incomplete' : 'pending',
           dailyTasks: updatedDailyTasks,
           customTasks: dateProgress.customTasks || [],
           failedTasks: dateProgress.failedTasks || [],
@@ -566,11 +568,12 @@
 
         const totalTasks = tasksForDate.daily.length + tasksForDate.custom.length;
         const completedTasks = (dateProgress.dailyTasks || []).length + updatedCustomTasks.length;
-        const allComplete = completedTasks === totalTasks && totalTasks > 0;
+        const failedTasks = dateProgress.failedTasks?.length || 0;
+        const allComplete = completedTasks === totalTasks && totalTasks > 0 && failedTasks === 0;
 
         const newProgress = { ...progress };
         newProgress[dateKey] = {
-          status: allComplete ? 'complete' : 'pending',
+          status: allComplete ? 'complete' : failedTasks > 0 ? 'incomplete' : 'pending',
           dailyTasks: dateProgress.dailyTasks || [],
           customTasks: updatedCustomTasks,
           failedTasks: dateProgress.failedTasks || [],
@@ -645,8 +648,9 @@
           const tasksForDate = { daily: dailyTasks, custom: updatedCustomTasks[dateKey] || [] };
           const totalTasks = tasksForDate.daily.length + tasksForDate.custom.length;
           const completedTasks = (newProgress[dateKey].dailyTasks || []).length + newProgress[dateKey].customTasks.length;
-          const allComplete = completedTasks === totalTasks && totalTasks > 0;
-          newProgress[dateKey].status = allComplete ? 'complete' : newProgress[dateKey].locked ? 'incomplete' : 'pending';
+          const failedTasks = newProgress[dateKey].failedTasks?.length || 0;
+          const allComplete = completedTasks === totalTasks && totalTasks > 0 && failedTasks === 0;
+          newProgress[dateKey].status = allComplete ? 'complete' : failedTasks > 0 ? 'incomplete' : newProgress[dateKey].locked ? 'incomplete' : 'pending';
           saveProgress(newProgress);
         }
       };
@@ -688,7 +692,14 @@
         let icon = null;
 
         if (dayProgress) {
-          if (dayProgress.status === 'complete') {
+          // CHECK FOR FAILED TASKS FIRST - This is the key change!
+          if (dayProgress.failedTasks && dayProgress.failedTasks.length > 0) {
+            bgColor = isDark 
+              ? 'bg-gradient-to-br from-rose-500 via-red-500 to-orange-500 text-white shadow-xl shadow-red-900/50' 
+              : 'bg-gradient-to-br from-rose-400 via-red-400 to-orange-400 text-white shadow-xl shadow-red-500/30';
+            icon = <XCircle className="w-5 h-5 mt-1" />;
+          }
+          else if (dayProgress.status === 'complete') {
             bgColor = isDark 
               ? 'bg-gradient-to-br from-emerald-500 via-green-500 to-teal-500 text-white shadow-xl shadow-green-900/50' 
               : 'bg-gradient-to-br from-emerald-400 via-green-400 to-teal-400 text-white shadow-xl shadow-green-500/30';
