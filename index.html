@@ -323,13 +323,29 @@
       };
 
       const saveTasks = (tasks) => {
-        setDailyTasks(tasks);
-        try {
-          localStorage.setItem('daily-tasks', JSON.stringify(tasks));
-        } catch (error) {
-          console.error('Failed to save tasks:', error);
-        }
-      };
+  setDailyTasks(tasks);
+  try {
+    localStorage.setItem('daily-tasks', JSON.stringify(tasks));
+    
+    // Re-evaluate all days when tasks change
+    const newProgress = { ...progress };
+    Object.keys(newProgress).forEach(dateKey => {
+      const date = new Date(dateKey);
+      const dateCustomTasks = customTasks[dateKey] || [];
+      const totalTasks = tasks.length + dateCustomTasks.length;
+      const completedTasks = (newProgress[dateKey].dailyTasks?.length || 0) + (newProgress[dateKey].customTasks?.length || 0);
+      const failedTasks = newProgress[dateKey].failedTasks?.length || 0;
+      
+      // Recalculate status
+      const allComplete = completedTasks === totalTasks && totalTasks > 0 && failedTasks === 0;
+      newProgress[dateKey].status = allComplete ? 'complete' : failedTasks > 0 ? 'incomplete' : 'pending';
+    });
+    saveProgress(newProgress);
+    
+  } catch (error) {
+    console.error('Failed to save tasks:', error);
+  }
+};
 
       const saveCustomTasks = (tasks) => {
         setCustomTasks(tasks);
@@ -891,7 +907,7 @@
           <button
             key={day}
             onClick={() => handleDayClick(date)}
-            className={`aspect-square rounded-lg sm:rounded-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 relative ripple-effect ${
+            className={`aspect-square rounded-lg sm:rounded-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 relative ripple-effect ${
               isTodayDate ? 'ring-2 sm:ring-4 ring-blue-500 ring-offset-1 sm:ring-offset-2 ring-offset-transparent today-glow' : ''
             } ${bgColor}`}
           >
@@ -956,6 +972,17 @@
                         <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
                       </svg>
                     )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Reset all progress data? Your tasks will be kept.')) {
+                        localStorage.removeItem('calendar-progress');
+                        window.location.reload();
+                      }
+                    }}
+                    className="fixed bottom-4 right-4 px-4 py-2 bg-red-600 text-white rounded-lg shadow-lg text-sm font-bold z-50"
+                  >
+                    Reset Progress
                   </button>
                 </div>
                 <p className={`text-lg ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
@@ -1306,26 +1333,30 @@
 
           {showTaskModal && selectedDate && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
-              <div className={`rounded-3xl shadow-2xl max-w-lg w-full p-8 max-h-[90vh] overflow-y-auto transition-colors ${
+              <div className={`rounded-3xl shadow-2xl max-w-lg w-full p-8 pt-0 max-h-[90vh] overflow-y-auto transition-colors ${
                 isDark 
                   ? 'bg-zinc-900/95 border-2 border-zinc-800/50 shadow-zinc-950/50' 
                   : 'bg-white/95 border-2 border-gray-200 shadow-gray-900/20'
               }`}>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className={`text-2xl font-bold ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
-                    {selectedDate.toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </h3>
-                  <button
-                    onClick={() => setShowTaskModal(false)}
-                    className={`p-2 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 ${
-                      isDark 
-                        ? 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200' 
-                        : 'hover:bg-gray-100 text-gray-600 hover:text-gray-800'
-                    }`}
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
+                <div className={`sticky top-0 z-10 flex items-center justify-between mb-6 pb-4 -mx-8 px-8 pt-8 ${
+                    isDark 
+                      ? 'bg-zinc-900/95 backdrop-blur-md border-b-2 border-zinc-800/50' 
+                      : 'bg-white/95 backdrop-blur-md border-b-2 border-gray-200'
+                  }`}>
+                    <h3 className={`text-2xl font-bold ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                      {selectedDate.toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </h3>
+                    <button
+                      onClick={() => setShowTaskModal(false)}
+                      className={`p-2 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95 ${
+                        isDark 
+                          ? 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200' 
+                          : 'hover:bg-gray-100 text-gray-600 hover:text-gray-800'
+                      }`}
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
 
                 {isLocked && (
                   <div className={`mb-6 p-4 rounded-xl border-2 ${
@@ -1366,7 +1397,7 @@
                                 key={index}
                                 onClick={() => canToggle && toggleDailyTask(index)}
                                 disabled={!canToggle}
-                                className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 transition-all duration-300 ${
+                                className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
                                   isFailed
                                     ? isDark 
                                       ? 'bg-red-950/40 border-red-800 opacity-75' 
@@ -1508,7 +1539,7 @@
                                     <button
                                       onClick={() => canToggle && toggleCustomTask(index)}
                                       disabled={!canToggle}
-                                      className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 transition-all duration-300 ${
+                                      className={`w-full flex items-start gap-4 p-4 rounded-2xl border-2 transition-all duration-300 active:scale-95 ${
                                         isFailed
                                           ? isDark 
                                             ? 'bg-red-950/40 border-red-800 opacity-75': 'bg-red-50 border-red-400 opacity-75'
