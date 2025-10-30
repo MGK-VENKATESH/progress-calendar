@@ -144,13 +144,10 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         const swCode = `
-          const CACHE_NAME = 'progress-calendar-v1';
+          const CACHE_NAME = 'progress-calendar-v2';
           const urlsToCache = [
             '/',
-            'https://unpkg.com/react@18/umd/react.production.min.js',
-            'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-            'https://unpkg.com/@babel/standalone/babel.min.js',
-            'https://cdn.tailwindcss.com'
+
           ];
 
           self.addEventListener('install', (event) => {
@@ -163,7 +160,17 @@
           self.addEventListener('fetch', (event) => {
             event.respondWith(
               caches.match(event.request)
-                .then((response) => response || fetch(event.request))
+                .then((response) => {
+                  if (response) {
+                    return response;
+                  }
+                  return fetch(event.request).catch(() => {
+                    // Return the cached index.html for navigation requests when offline
+                    if (event.request.mode === 'navigate') {
+                      return caches.match('/');
+                    }
+                  });
+                })
             );
           });
         `;
@@ -974,16 +981,16 @@
                     )}
                   </button>
                   <button
-                    onClick={() => {
-                      if (window.confirm('Reset all progress data? Your tasks will be kept.')) {
-                        localStorage.removeItem('calendar-progress');
-                        window.location.reload();
-                      }
-                    }}
-                    className="fixed bottom-4 right-4 px-4 py-2 bg-red-600 text-white rounded-lg shadow-lg text-sm font-bold z-50"
-                  >
-                    Reset Progress
-                  </button>
+                  onClick={() => {
+                    if (window.confirm('Reset all progress data? Your tasks will be kept.')) {
+                      localStorage.removeItem('calendar-progress');
+                      window.location.reload();
+                    }
+                  }}
+                  className="fixed bottom-4 right-4 px-4 py-2 bg-red-600 text-white rounded-lg shadow-lg text-sm font-bold z-50"
+                >
+                  Reset Progress
+                </button>
                 </div>
                 <p className={`text-lg ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                   Track your daily tasks with time-based automation
