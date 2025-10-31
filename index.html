@@ -141,54 +141,57 @@
   </style>
   
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        const swCode = `
-          const CACHE_NAME = 'progress-calendar-v2';
-          const urlsToCache = [
-            '/',
-          ];
+    // Delay service worker registration until after page loads
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if ('serviceWorker' in navigator) {
+          const swCode = `
+            const CACHE_NAME = 'progress-calendar-v3';
+            const urlsToCache = ['/'];
 
-          self.addEventListener('install', (event) => {
-            event.waitUntil(
-              caches.open(CACHE_NAME)
-                .then((cache) => cache.addAll(urlsToCache))
-            );
-          });
+            self.addEventListener('install', (event) => {
+              event.waitUntil(
+                caches.open(CACHE_NAME)
+                  .then((cache) => cache.addAll(urlsToCache))
+                  .catch(err => console.log('Cache install error:', err))
+              );
+            });
 
-          self.addEventListener('fetch', (event) => {
-            event.respondWith(
-              caches.match(event.request)
-                .then((response) => {
-                  if (response) {
-                    return response;
-                  }
-                  return fetch(event.request).catch(() => {
-                    if (event.request.mode === 'navigate') {
-                      return caches.match('/');
+            self.addEventListener('fetch', (event) => {
+              event.respondWith(
+                caches.match(event.request)
+                  .then((response) => {
+                    if (response) {
+                      return response;
                     }
-                  });
-                })
-            );
-          });
+                    return fetch(event.request).catch(() => {
+                      if (event.request.mode === 'navigate') {
+                        return caches.match('/');
+                      }
+                    });
+                  })
+              );
+            });
 
-          // Handle notification click
-          self.addEventListener('notificationclick', (event) => {
-            event.notification.close();
-            event.waitUntil(
-              clients.openWindow('/')
-            );
-          });
-        `;
-        
-        const blob = new Blob([swCode], { type: 'application/javascript' });
-        const swUrl = URL.createObjectURL(blob);
-        
-        navigator.serviceWorker.register(swUrl)
-          .then(() => console.log('Service Worker registered'))
-          .catch((err) => console.log('Service Worker registration failed:', err));
-      });
-    }
+            self.addEventListener('notificationclick', (event) => {
+              event.notification.close();
+              event.waitUntil(clients.openWindow('/'));
+            });
+          `;
+          
+          try {
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(blob);
+            
+            navigator.serviceWorker.register(swUrl)
+              .then(() => console.log('✓ Service Worker registered'))
+              .catch((err) => console.log('✗ Service Worker error:', err));
+          } catch (err) {
+            console.log('✗ Service Worker setup error:', err);
+          }
+        }
+      }, 1000);
+    });
   </script>
 </head>
 <body>
