@@ -147,7 +147,6 @@
           const CACHE_NAME = 'progress-calendar-v2';
           const urlsToCache = [
             '/',
-
           ];
 
           self.addEventListener('install', (event) => {
@@ -165,12 +164,19 @@
                     return response;
                   }
                   return fetch(event.request).catch(() => {
-                    // Return the cached index.html for navigation requests when offline
                     if (event.request.mode === 'navigate') {
                       return caches.match('/');
                     }
                   });
                 })
+            );
+          });
+
+          // Handle notification click
+          self.addEventListener('notificationclick', (event) => {
+            event.notification.close();
+            event.waitUntil(
+              clients.openWindow('/')
             );
           });
         `;
@@ -179,8 +185,16 @@
         const swUrl = URL.createObjectURL(blob);
         
         navigator.serviceWorker.register(swUrl)
-          .then(() => console.log('Service Worker registered'))
-          .catch((err) => console.log('Service Worker registration failed:', err));
+        .then((registration) => {
+          console.log('Service Worker registered');
+          // Request notification permission after SW registration
+          if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission().then(permission => {
+              console.log('Notification permission:', permission);
+            });
+          }
+        })
+        .catch((err) => console.log('Service Worker registration failed:', err));
       });
     }
   </script>
@@ -188,6 +202,34 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
+    // Error boundary to catch React errors
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+      }
+
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      componentDidCatch(error, errorInfo) {
+        console.error('React Error:', error, errorInfo);
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div style={{ padding: '20px', color: 'red' }}>
+              <h1>Something went wrong.</h1>
+              <pre>{this.state.error?.toString()}</pre>
+              <button onClick={() => window.location.reload()}>Reload</button>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
 
     const { useState, useEffect } = React;
 
@@ -231,7 +273,74 @@
     const AlertCircle = ({ className }) => (
     <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
     );
-
+    // Function to schedule notifications for tasks
+    const scheduleNotification = (task, taskType = 'daily') => {
+      if (!task.time || !('Notification' in window)) return;
+      
+      const taskObj = typeof task === 'string' ? { name: task, time: null } : task;
+      const taskName = taskObj.name || task;
+      
+      const [hours, minutes] = task.time.split(':').map(Number);
+      const now = new Date();
+      const taskTime = new Date();
+      taskTime.setHours(hours, minutes, 0, 0);
+      
+      // Set notification 5 minutes before task time
+      const notificationTime = new Date(taskTime.getTime() - 5 * 60000);
+      
+      // Format time for display
+      const formatTime = (date) => {
+        return date.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: true 
+        });
+      };
+      
+      // Only schedule if notification time is in the future
+      if (notificationTime > now) {
+        const timeUntilNotification = notificationTime.getTime() - now.getTime();
+        
+        console.log(`Notification scheduled for "${taskName}" at ${formatTime(notificationTime)}`);
+        
+        const timeoutId = setTimeout(() => {
+          if (Notification.permission === 'granted') {
+            try {
+              const notification = new Notification(taskName, {
+                body: `Task starts in 5 minutes at ${formatTime(taskTime)}`,
+                icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234F46E5' width='100' height='100'/><text y='75' font-size='70' text-anchor='middle' x='50' fill='white'>⏰</text></svg>",
+                badge: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234F46E5' width='100' height='100'/><text y='75' font-size='70' text-anchor='middle' x='50' fill='white'>📅</text></svg>",
+                tag: `task-${taskType}-${taskName}-${task.time}`,
+                requireInteraction: true,
+                silent: false,
+                vibrate: [200, 100, 200],
+                timestamp: taskTime.getTime()
+              });
+              
+              // Play notification sound (browser default)
+              notification.onclick = () => {
+                window.focus();
+                notification.close();
+              };
+              
+              // Auto-close notification after 30 seconds
+              setTimeout(() => notification.close(), 30000);
+              
+              console.log(`Notification shown for "${taskName}"`);
+            } catch (error) {
+              console.error('Failed to show notification:', error);
+            }
+          } else {
+            console.log('Notification permission not granted');
+          }
+        }, timeUntilNotification);
+        
+        // Store timeout ID for cleanup if needed
+        return timeoutId;
+      } else {
+        console.log(`Notification time already passed for "${taskName}"`);
+      }
+    };
     function ProgressCalendar() {
       const [currentDate, setCurrentDate] = useState(new Date());
       const [progress, setProgress] = useState({});
@@ -279,6 +388,65 @@
         
         return () => clearInterval(interval);
       }, []);
+
+      useEffect(() => {
+        // Request notification permission with better mobile handling
+        if ('Notification' in window && Notification.permission === 'default') {
+          // On mobile, we should request permission after user interaction
+          const requestPermission = () => {
+            Notification.requestPermission().then(permission => {
+              if (permission === 'granted') {
+                console.log('Notifications enabled');
+              }
+            }).catch(err => {
+              console.error('Notification permission error:', err);
+            });
+          };
+          
+          // Auto-request on desktop, wait for user interaction on mobile
+          if (window.innerWidth > 768) {
+            requestPermission();
+          }
+        }
+      }, []);
+      useEffect(() => {
+        const scheduleAllNotifications = () => {
+          const today = new Date();
+          const dateKey = formatDateKey(today);
+          
+          // Schedule daily tasks
+          dailyTasks.forEach(task => {
+            if (task.time) {
+              scheduleNotification(task, 'daily');
+            }
+          });
+          
+          // Schedule custom tasks for today
+          const todayCustomTasks = customTasks[dateKey] || [];
+          todayCustomTasks.forEach(task => {
+            if (task.time) {
+              scheduleNotification(task, 'custom');
+            }
+          });
+        };
+        
+        scheduleAllNotifications();
+        
+        // Re-schedule at midnight for next day
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 1, 0);
+        const timeUntilMidnight = tomorrow.getTime() - now.getTime();
+        
+        const midnightTimer = setTimeout(() => {
+          scheduleAllNotifications();
+        }, timeUntilMidnight);
+        
+        return () => clearTimeout(midnightTimer);
+      }, [dailyTasks, customTasks]);
+
+      
 
       useEffect(() => {
         calculateStreak();
@@ -961,36 +1129,95 @@
                   } bg-clip-text text-transparent`}>
                     Progress Calendar
                   </h1>
-                  <button
-                    onClick={() => setIsDark(!isDark)}
-                    className={`p-3 rounded-2xl transition-all duration-300 hover:scale-110 active:scale-95 shadow-lg ${
-                      isDark 
-                        ? 'bg-yellow-500 hover:bg-yellow-400 text-gray-900' 
-                        : 'bg-gray-800 hover:bg-gray-700 text-yellow-400'
-                    }`}
-                    title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-                  >
-                    {isDark ? (
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                      </svg>
-                    ) : (
-                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-                      </svg>
+                  <div className="flex items-center gap-2">
+                    {Notification.permission === 'default' && (
+                      <button
+                        onClick={() => {
+                          Notification.requestPermission().then(permission => {
+                            if (permission === 'granted') {
+                              alert('Notifications enabled! You will be reminded 5 minutes before each task.');
+                            } else if (permission === 'denied') {
+                              alert('Please enable notifications in your browser settings to receive task reminders.');
+                            }
+                          }).catch(err => {
+                            console.error('Notification error:', err);
+                            alert('Could not enable notifications. Please check your browser settings.');
+                          });
+                        }}
+                        className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 hover:scale-105 ${
+                          isDark 
+                            ? 'bg-blue-600 hover:bg-blue-500 text-white' 
+                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                      >
+                        🔔 Enable Notifications
+                      </button>
                     )}
-                  </button>
+                    
+                    {Notification.permission === 'granted' && (
+                      <button
+                        onClick={() => {
+                          try {
+                            const notification = new Notification('Test Notification', {
+                              body: 'Notifications are working! You will receive reminders 5 minutes before each task.',
+                              icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234F46E5' width='100' height='100'/><text y='75' font-size='70' text-anchor='middle' x='50' fill='white'>✅</text></svg>",
+                              requireInteraction: false,
+                              vibrate: [200, 100, 200],
+                              silent: false
+                            });
+                            
+                            notification.onclick = () => {
+                              window.focus();
+                              notification.close();
+                            };
+                            
+                            setTimeout(() => notification.close(), 10000);
+                          } catch (error) {
+                            console.error('Notification test failed:', error);
+                            alert('Notification test failed. Check console for details.');
+                          }
+                        }}
+                        className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-300 hover:scale-105 ${
+                          isDark 
+                            ? 'bg-green-600 hover:bg-green-500 text-white' 
+                            : 'bg-green-600 hover:bg-green-700 text-white'
+                        }`}
+                      >
+                        ✅ Test
+                      </button>
+                    )}
+                    
+                    <button
+                      onClick={() => setIsDark(!isDark)}
+                      className={`p-3 rounded-2xl transition-all duration-300 hover:scale-110 active:scale-95 shadow-lg ${
+                        isDark 
+                          ? 'bg-yellow-500 hover:bg-yellow-400 text-gray-900' 
+                          : 'bg-gray-800 hover:bg-gray-700 text-yellow-400'
+                      }`}
+                      title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                    >
+                      {isDark ? (
+                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                   <button
-                  onClick={() => {
-                    if (window.confirm('Reset all progress data? Your tasks will be kept.')) {
-                      localStorage.removeItem('calendar-progress');
-                      window.location.reload();
-                    }
-                  }}
-                  className="fixed bottom-4 right-4 px-4 py-2 bg-red-600 text-white rounded-lg shadow-lg text-sm font-bold z-50"
-                >
-                  Reset Progress
-                </button>
+                    onClick={() => {
+                      if (window.confirm('Reset all progress data? Your tasks will be kept.')) {
+                        localStorage.removeItem('calendar-progress');
+                        window.location.reload();
+                      }
+                    }}
+                    className="fixed bottom-4 right-4 px-4 py-2 bg-red-600 text-white rounded-lg shadow-lg text-sm font-bold z-50"
+                  >
+                    Reset Progress
+                  </button>
                 </div>
                 <p className={`text-lg ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                   Track your daily tasks with time-based automation
@@ -1059,9 +1286,21 @@
                 <h3 className={`font-bold text-lg mb-2 ${isDark ? 'text-blue-300' : 'text-blue-900'}`}>
                   Daily Recurring Tasks
                 </h3>
-                <p className={`text-sm mb-4 ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
-                  These tasks apply to every day. Add time deadlines for automatic tracking!
-                </p>
+                <div className="space-y-2 mb-4">
+                  <p className={`text-sm ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
+                    These tasks apply to every day. Add time deadlines for automatic tracking!
+                  </p>
+                  {Notification.permission === 'granted' && (
+                    <p className={`text-xs font-semibold ${isDark ? 'text-green-400' : 'text-green-700'}`}>
+                      ✅ Notifications enabled - You'll be reminded 5 minutes before each task
+                    </p>
+                  )}
+                  {Notification.permission === 'denied' && (
+                    <p className={`text-xs font-semibold ${isDark ? 'text-red-400' : 'text-red-700'}`}>
+                      ❌ Notifications blocked - Enable in browser settings to receive reminders
+                    </p>
+                  )}
+                </div>
                 <div className="space-y-3 mb-4">
                   <input
                     type="text"
@@ -1731,7 +1970,7 @@
       );
     }
 
-    ReactDOM.render(React.createElement(ProgressCalendar), document.getElementById('root'));
+    ReactDOM.render(React.createElement(ErrorBoundary, null, React.createElement(ProgressCalendar)), document.getElementById('root'));
   </script>
 </body>
 </html>
