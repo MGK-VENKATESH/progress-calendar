@@ -188,7 +188,7 @@
         .then((registration) => {
           console.log('Service Worker registered');
           // Request notification permission after SW registration
-          if (typeof window !== 'undefined' && window.Notification && Notification.permission === 'default') {
+          if (typeof window !== 'undefined' && window.Notification && window.Notification.permission === 'default') {
             window.Notification.requestPermission().then(permission => {
               console.log('Notification permission:', permission);
             });
@@ -391,7 +391,7 @@
 
       useEffect(() => {
         // Request notification permission with better mobile handling
-        if (typeof window !== 'undefined' && window.Notification && Notification.permission === 'default') {
+        if (typeof window !== 'undefined' && window.Notification && window.Notification.permission === 'default') {
           // On mobile, we should request permission after user interaction
           const requestPermission = () => {
             Notification.requestPermission().then(permission => {
