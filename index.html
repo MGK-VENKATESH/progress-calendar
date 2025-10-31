@@ -188,8 +188,8 @@
         .then((registration) => {
           console.log('Service Worker registered');
           // Request notification permission after SW registration
-          if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission().then(permission => {
+          if (typeof window !== 'undefined' && window.Notification && Notification.permission === 'default') {
+            window.Notification.requestPermission().then(permission => {
               console.log('Notification permission:', permission);
             });
           }
@@ -275,7 +275,7 @@
     );
     // Function to schedule notifications for tasks
     const scheduleNotification = (task, taskType = 'daily') => {
-      if (!task.time || !('Notification' in window)) return;
+      if (!task.time || typeof window === 'undefined' || !window.Notification) return;
       
       const taskObj = typeof task === 'string' ? { name: task, time: null } : task;
       const taskName = taskObj.name || task;
@@ -304,9 +304,9 @@
         console.log(`Notification scheduled for "${taskName}" at ${formatTime(notificationTime)}`);
         
         const timeoutId = setTimeout(() => {
-          if (Notification.permission === 'granted') {
+          if (window.Notification && window.Notification.permission === 'granted') {
             try {
-              const notification = new Notification(taskName, {
+              const notification = new window.Notification(taskName, {
                 body: `Task starts in 5 minutes at ${formatTime(taskTime)}`,
                 icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234F46E5' width='100' height='100'/><text y='75' font-size='70' text-anchor='middle' x='50' fill='white'>⏰</text></svg>",
                 badge: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234F46E5' width='100' height='100'/><text y='75' font-size='70' text-anchor='middle' x='50' fill='white'>📅</text></svg>",
@@ -391,7 +391,7 @@
 
       useEffect(() => {
         // Request notification permission with better mobile handling
-        if ('Notification' in window && Notification.permission === 'default') {
+        if (typeof window !== 'undefined' && window.Notification && Notification.permission === 'default') {
           // On mobile, we should request permission after user interaction
           const requestPermission = () => {
             Notification.requestPermission().then(permission => {
@@ -1130,10 +1130,10 @@
                     Progress Calendar
                   </h1>
                   <div className="flex items-center gap-2">
-                    {Notification.permission === 'default' && (
+                    {typeof window !== 'undefined' && window.Notification && window.Notification.permission === 'default' && (
                       <button
                         onClick={() => {
-                          Notification.requestPermission().then(permission => {
+                          window.Notification.requestPermission().then(permission => {
                             if (permission === 'granted') {
                               alert('Notifications enabled! You will be reminded 5 minutes before each task.');
                             } else if (permission === 'denied') {
@@ -1154,11 +1154,11 @@
                       </button>
                     )}
                     
-                    {Notification.permission === 'granted' && (
+                    {typeof window !== 'undefined' && window.Notification && window.Notification.permission === 'granted' && (
                       <button
                         onClick={() => {
                           try {
-                            const notification = new Notification('Test Notification', {
+                            const notification = new window.Notification('Test Notification', {
                               body: 'Notifications are working! You will receive reminders 5 minutes before each task.',
                               icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%234F46E5' width='100' height='100'/><text y='75' font-size='70' text-anchor='middle' x='50' fill='white'>✅</text></svg>",
                               requireInteraction: false,
@@ -1290,12 +1290,12 @@
                   <p className={`text-sm ${isDark ? 'text-blue-400' : 'text-blue-700'}`}>
                     These tasks apply to every day. Add time deadlines for automatic tracking!
                   </p>
-                  {Notification.permission === 'granted' && (
+                  {typeof window !== 'undefined' && window.Notification && window.Notification.permission === 'granted' && (
                     <p className={`text-xs font-semibold ${isDark ? 'text-green-400' : 'text-green-700'}`}>
                       ✅ Notifications enabled - You'll be reminded 5 minutes before each task
                     </p>
                   )}
-                  {Notification.permission === 'denied' && (
+                  {typeof window !== 'undefined' && window.Notification && window.Notification.permission === 'denied' && (
                     <p className={`text-xs font-semibold ${isDark ? 'text-red-400' : 'text-red-700'}`}>
                       ❌ Notifications blocked - Enable in browser settings to receive reminders
                     </p>
